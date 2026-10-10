@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gerador de Planilhas Shopee</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #171f31;
+    --panel2: #1e283d;
+    --border: #2b3650;
+    --text: #e7ecf5;
+    --muted: #93a0b8;
+    --accent: #ff6b35;
+    --accent2: #ff8a5c;
+    --ok: #3ddc84;
+    --err: #ff5c6c;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 24px 20px 0;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+  .tabs {
+    display: flex;
+    gap: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 10px 18px;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    font-size: 14px;
+    font-weight: 600;
+    user-select: none;
+  }
+  .tab.ativa { color: var(--text); border-bottom-color: var(--accent); }
+  main { max-width: 1000px; margin: 0 auto; padding: 20px; }
+  .view { display: none; }
+  .view.ativa { display: block; }
+  .card-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card-box h2 { font-size: 15px; margin: 0 0 12px; color: var(--text); }
+  .card-box h2 .n { color: var(--muted); font-weight: 400; }
+
+  .grid-clientes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .cliente-card {
+    background: var(--panel2);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    cursor: pointer;
+    position: relative;
+    transition: border-color .15s, background .15s;
+  }
+  .cliente-card:hover { border-color: #3b4968; }
+  .cliente-card.selecionado { border-color: var(--accent); background: #2a2013; }
+  .cliente-card .nome { font-weight: 600; font-size: 14px; word-break: break-word; padding-right: 20px; }
+  .cliente-card .arquivo { color: var(--muted); font-size: 12px; margin-top: 4px; word-break: break-all; }
+  .cliente-card .check {
+    position: absolute; top: 10px; right: 10px;
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1.5px solid var(--border);
+    background: var(--panel);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--bg);
+  }
+  .cliente-card.selecionado .check { background: var(--accent); border-color: var(--accent); color: #1a1004; }
+
+  .vazio { color: var(--muted); font-size: 13px; padding: 10px 2px; }
+
+  .row-acoes { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  button {
+    font: inherit; cursor: pointer; border: none; border-radius: 8px;
+    padding: 9px 16px; font-size: 13px; font-weight: 600;
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+  }
+  button:hover { border-color: #3b4968; }
+  button.primario { background: var(--accent); color: #1a0f08; border-color: var(--accent); }
+  button.primario:hover { background: var(--accent2); }
+  button.perigo { color: var(--err); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  .dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: 10px;
+    padding: 22px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    background: var(--panel2);
+  }
+  .dropzone.arrastando { border-color: var(--accent); color: var(--text); }
+  .dropzone b { color: var(--text); }
+  .dropzone .arquivo-ok { color: var(--ok); font-weight: 600; margin-top: 6px; }
+
+  .campos-num { display: flex; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
+  .campo { display: flex; flex-direction: column; gap: 4px; }
+  .campo label { font-size: 12px; color: var(--muted); }
+  .campo input {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px; width: 130px;
+  }
+
+  .form-cliente { display: flex; flex-direction: column; gap: 10px; max-width: 420px; }
+  .form-cliente input[type=text] {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 11px; font-size: 14px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table th, table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  table th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+  .badge.ok { background: #113d28; color: var(--ok); }
+  .badge.err { background: #3d1418; color: var(--err); }
+
+  .log {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: pre-wrap;
+    max-height: 160px;
+    overflow: auto;
+  }
+  .lista-clientes-cad { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .item-cad {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; gap: 10px; flex-wrap: wrap;
+  }
+  .item-cad .info { font-size: 13px; }
+  .item-cad .info .n { font-weight: 600; }
+  .item-cad .info .a { color: var(--muted); font-size: 12px; }
+  .item-cad .acoes { display: flex; gap: 6px; }
+  .item-cad .acoes button { padding: 6px 10px; font-size: 12px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 30px 0; }
+  a.link-download { color: var(--accent2); text-decoration: none; font-weight: 600; }
+  a.link-download:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Gerador de Planilhas Shopee</h1>
+  <div class="sub">Gera o arquivo de importação em massa já preenchido para cada loja, a partir de 1 anúncio exportado do UpSeller.</div>
+  <div class="tabs">
+    <div class="tab ativa" data-view="gerar">Gerar</div>
+    <div class="tab" data-view="clientes">Clientes</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- VIEW: GERAR -->
+  <section class="view ativa" id="view-gerar">
+
+    <div class="card-box">
+      <h2>1. Escolha as lojas <span class="n" id="contagem-selecionadas"></span></h2>
+      <div class="row-acoes">
+        <button id="btn-todos">Selecionar todos</button>
+        <button id="btn-nenhum">Limpar seleção</button>
+      </div>
+      <div id="grid-clientes" class="grid-clientes"></div>
+      <div id="sem-clientes" class="vazio" style="display:none">
+        Nenhum cliente cadastrado ainda. Vá na aba <b>Clientes</b> e cadastre a loja com o arquivo Modelo em branco dela.
+      </div>
+    </div>
+
+    <div class="card-box">
+      <h2>2. Planilha exportada do UpSeller</h2>
+      <div class="dropzone" id="dropzone-export">
+        <div>Arraste o arquivo aqui ou <b>clique para escolher</b></div>
+        <div id="export-status"></div>
+      </div>
+      <input type="file" id="input-export" accept=".xlsx" style="display:none" />
+
+      <div class="campos-num">
+        <div class="campo">
+          <label>Preço (R$)</label>
+          <input type="number" id="campo-preco" value="49.90" step="0.01" min="0" />
+        </div>
+        <div class="campo">
+          <label>Estoque</label>
+          <input type="number" id="campo-estoque" value="5000" step="1" min="0" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card-box">
+      <h2>3. Gerar</h2>
+      <div class="row-acoes">
+        <button class="primario" id="btn-gerar">Gerar planilhas</button>
+        <button id="btn-baixar-zip" style="display:none">Baixar tudo (.zip)</button>
+      </div>
+      <div id="resultado"></div>
+      <div class="log" id="log"></div>
+    </div>
+
+  </section>
+
+  <!-- VIEW: CLIENTES -->
+  <section class="view" id="view-clientes">
+    <div class="card-box">
+      <h2>Cadastrar novo cliente</h2>
+      <div class="form-cliente">
+        <input type="text" id="novo-nome" placeholder="Nome da loja (ex: Outfico 2)" />
+        <div class="dropzone" id="dropzone-modelo">
+          <div>Arraste o arquivo <b>Modelo</b> em branco dessa loja (baixado da Shopee) ou clique para escolher</div>
+          <div id="modelo-status"></div>
+        </div>
+        <input type="file" id="input-modelo" accept=".xlsx" style="display:none" />
+        <button class="primario" id="btn-add-cliente">Cadastrar cliente</button>
+      </div>
+    </div>
+
+    <div class="card-box">
+      <h2>Clientes cadastrados <span class="n" id="contagem-clientes"></span></h2>
+      <div id="lista-cad" class="lista-clientes-cad"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>Tudo roda localmente no seu navegador — nenhum arquivo é enviado para fora.</footer>
+
+<script>
+/* =========================================================================
+   NÚCLEO DO GERADOR — mesma lógica validada em gerador_shopee.py,
+   portada para JavaScript. Opera em cima do JSZip (CDN carregado acima).
+   ========================================================================= */
+
+const EXPORT_COLS = {
+  loja: 1, id_anuncio: 2, nome: 3, sku_principal: 4, descricao: 5,
+  categoria_id: 6, var1_nome: 7, var1_opcao: 8, var1_imagem: 9,
+  var2_nome: 10, var2_opcao: 11, sku_variacao: 12, id_variante: 13,
+  preco: 14, preco_desconto: 15, qtd: 16, qtd_promo: 17, gtin: 18,
+  guia_tamanhos: 19, imagem_capa: 20,
+  img1: 21, img2: 22, img3: 23, img4: 24, img5: 25, img6: 26, img7: 27, img8: 28, img9: 29,
+  peso: 30, comprimento: 31, largura: 32, altura: 33,
+};
+
+function colLetterToNum(letters) {
+  let n = 0;
+  for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 65 + 1);
+  return n;
+}
+function numToColLetter(n) {
+  let letters = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    letters = String.fromCharCode(65 + rem) + letters;
+    n = Math.floor((n - 1) / 26);
+  }
+  return letters;
+}
+
+function unescapeXmlText(s) {
+  return s
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+function escapeXmlText(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function loadSharedStrings(xml) {
+  if (!xml) return [];
+  const out = [];
+  const re = /<si>([\s\S]*?)<\/si>/g;
+  let m;
+  while ((m = re.exec(xml))) {
+    const texts = [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((x) => x[1]);
+    out.push(unescapeXmlText(texts.join('')));
+  }
+  return out;
+}
+
+function cellValue(cellXml, shared) {
+  const tMatch = cellXml.match(/<c[^>]*\bt="([^"]*)"/);
+  const t = tMatch ? tMatch[1] : null;
+  if (t === 'inlineStr') {
+    const texts = [...cellXml.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((x) => x[1]);
+    return texts.length ? unescapeXmlText(texts.join('')) : '';
+  }
+  const vMatch = cellXml.match(/<v>([\s\S]*?)<\/v>/);
+  if (!vMatch) return null;
+  const val = vMatch[1];
+  if (t === 's') return shared[parseInt(val, 10)];
+  return val;
+}
+
+function parseSheetRows(xml) {
+  const rows = [];
+  const rowRe = /<row[^>]*\br="(\d+)"[^>]*>([\s\S]*?)<\/row>/g;
+  let m;
+  while ((m = rowRe.exec(xml))) {
+    const r = parseInt(m[1], 10);
+    const body = m[2];
+    const rowvals = {};
+    const cellRe = /<c r="([A-Z]+)\d+"[^>]*(?:\/>|>[\s\S]*?<\/c>)/g;
+    let cm;
+    while ((cm = cellRe.exec(body))) {
+      const colnum = colLetterToNum(cm[1]);
+      rowvals[colnum] = cm[0];
+    }
+    rows.push([r, rowvals]);
+  }
+  return rows;
+}
+
+async function findSheetPathByName(zip, sheetName) {
+  const wbXml = await zip.file('xl/workbook.xml').async('string');
+  const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+  const re = new RegExp(`<sheet name="${sheetName}"[^>]*r:id="(rId\\d+)"`);
+  const m = wbXml.match(re);
+  if (!m) return null;
+  const rid = m[1];
+  const t = relsXml.match(new RegExp(`Id="${rid}" Target="([^"]+)"`));
+  return 'xl/' + t[1];
+}
+
+async function lerExportUpseller(arrayBuffer) {
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const wbXml = await zip.file('xl/workbook.xml').async('string');
+  const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+  const m = wbXml.match(/<sheet[^>]*r:id="(rId\d+)"/);
+  const rid = m[1];
+  const t = relsXml.match(new RegExp(`Id="${rid}" Target="([^"]+)"`));
+  const sheetPath = 'xl/' + t[1];
+  const sheetXml = await zip.file(sheetPath).async('string');
+
+  let shared = [];
+  if (zip.file('xl/sharedStrings.xml')) {
+    shared = loadSharedStrings(await zip.file('xl/sharedStrings.xml').async('string'));
+  }
+
+  const rows = parseSheetRows(sheetXml).sort((a, b) => a[0] - b[0]);
+  const dataRows = rows.filter(([r]) => r >= 2);
+
+  const produtos = [];
+  for (const [, rowvals] of dataRows) {
+    const linha = {};
+    for (const [campo, colnum] of Object.entries(EXPORT_COLS)) {
+      const cellXml = rowvals[colnum];
+      linha[campo] = cellXml ? cellValue(cellXml, shared) : null;
+    }
+    if (linha.nome) produtos.push(linha);
+  }
+
+  const CAMPOS_PRODUTO = [
+    'categoria_id', 'descricao', 'guia_tamanhos', 'imagem_capa',
+    'img1', 'img2', 'img3', 'img4', 'img5', 'img6', 'img7', 'img8',
+    'peso', 'comprimento', 'largura', 'altura',
+  ];
+  let ultimoSku = null;
+  let ultimosValores = {};
+  for (const linha of produtos) {
+    if (linha.sku_principal !== ultimoSku) {
+      ultimoSku = linha.sku_principal;
+      ultimosValores = {};
+    }
+    for (const campo of CAMPOS_PRODUTO) {
+      if (linha[campo]) ultimosValores[campo] = linha[campo];
+      else if (campo in ultimosValores) linha[campo] = ultimosValores[campo];
+    }
+  }
+
+  return produtos;
+}
+
+function fmtNum(valor, padrao = '') {
+  if (valor === null || valor === undefined || valor === '') return padrao;
+  const f = parseFloat(valor);
+  if (Number.isNaN(f)) return String(valor);
+  if (f === Math.trunc(f)) return String(Math.trunc(f));
+  return String(f);
+}
+
+function montarLinhaModelo(produto, preco, estoque) {
+  const categoria = fmtNum(produto.categoria_id);
+  const integracao = produto.sku_principal || '';
+  const imagensExtra = [];
+  for (let i = 1; i <= 8; i++) imagensExtra.push(produto['img' + i] || '');
+
+  const campos = [
+    [categoria, 'num'],
+    [produto.nome || '', 'txt'],
+    [produto.descricao || '', 'txt'],
+    [produto.sku_principal || '', 'txt'],
+    [integracao, 'txt'],
+    [produto.var1_nome || '', 'txt'],
+    [produto.var1_opcao || '', 'txt'],
+    [produto.var1_imagem || '', 'txt'],
+    [produto.var2_nome || '', 'txt'],
+    [produto.var2_opcao || '', 'txt'],
+    [fmtNum(preco), 'num'],
+    [fmtNum(estoque), 'num'],
+    [produto.sku_variacao || '', 'txt'],
+    ['', 'txt'],
+    [produto.guia_tamanhos || '', 'txt'],
+    ['', 'txt'],
+    ['', 'txt'],
+    [produto.imagem_capa || '', 'txt'],
+  ];
+  for (const img of imagensExtra) campos.push([img, 'txt']);
+  campos.push(
+    [fmtNum(produto.peso), 'num'],
+    [fmtNum(produto.comprimento), 'num'],
+    [fmtNum(produto.largura), 'num'],
+    [fmtNum(produto.altura), 'num'],
+  );
+  return campos;
+}
+
+function construirXmlLinha(numLinha, campos) {
+  const celulas = [];
+  campos.forEach(([valor, tipo], i) => {
+    const ref = numToColLetter(i + 1) + numLinha;
+    if (valor === '' || valor === null || valor === undefined) return;
+    if (tipo === 'num') {
+      const f = parseFloat(valor);
+      if (!Number.isNaN(f) && String(valor).trim() !== '') {
+        celulas.push(`<c r="${ref}"><v>${valor}</v></c>`);
+        return;
+      }
+    }
+    const texto = escapeXmlText(String(valor));
+    const preserve = (String(valor).includes('\n') || texto !== texto.trim()) ? ' xml:space="preserve"' : '';
+    celulas.push(`<c r="${ref}" t="inlineStr"><is><t${preserve}>${texto}</t></is></c>`);
+  });
+  return `<row r="${numLinha}">` + celulas.join('') + '</row>';
+}
+
+async function gerarModeloParaLoja(modeloArrayBuffer, produtos, preco, estoque) {
+  const zip = await JSZip.loadAsync(modeloArrayBuffer);
+  const modeloPath = await findSheetPathByName(zip, 'Modelo');
+  if (!modeloPath) throw new Error('Não encontrei a aba "Modelo" nesse arquivo.');
+
+  const modeloXml = await zip.file(modeloPath).async('string');
+
+  const linhasNovas = produtos.map((produto, i) => {
+    const numLinha = 7 + i;
+    const campos = montarLinhaModelo(produto, preco, estoque);
+    return construirXmlLinha(numLinha, campos);
+  });
+
+  const blocoNovo = linhasNovas.join('');
+  let modeloXmlNovo = modeloXml.replace('</sheetData>', blocoNovo + '</sheetData>');
+
+  if (linhasNovas.length) {
+    const ultimaLinha = 6 + produtos.length;
+    const nCols = montarLinhaModelo(produtos[0], preco, estoque).length;
+    const ultimaColuna = numToColLetter(nCols);
+    modeloXmlNovo = modeloXmlNovo.replace(/<dimension ref="[^"]*"/, `<dimension ref="A1:${ultimaColuna}${ultimaLinha}"`);
+  }
+
+  zip.file(modeloPath, modeloXmlNovo, { createFolders: false });
+  return zip.generateAsync({ type: 'blob' });
+}
+
+/* =========================================================================
+   BANCO LOCAL DE CLIENTES (IndexedDB) — persiste entre sessões no navegador
+   ========================================================================= */
+
+const DB_NOME = 'gerador-shopee-db';
+const DB_STORE = 'clientes';
+let dbPromise = null;
+
+function abrirDb() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NOME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(DB_STORE)) {
+        db.createObjectStore(DB_STORE, { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+
+async function dbListarClientes() {
+  const db = await abrirDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readonly');
+    const store = tx.objectStore(DB_STORE);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbAdicionarCliente(cliente) {
+  const db = await abrirDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    const req = tx.objectStore(DB_STORE).add(cliente);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbRemoverCliente(id) {
+  const db = await abrirDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    const req = tx.objectStore(DB_STORE).delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbAtualizarArquivoCliente(id, arquivoNome, arquivoBlob) {
+  const db = await abrirDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    const store = tx.objectStore(DB_STORE);
+    const getReq = store.get(id);
+    getReq.onsuccess = () => {
+      const cliente = getReq.result;
+      if (!cliente) { reject(new Error('cliente não encontrado')); return; }
+      cliente.arquivoNome = arquivoNome;
+      cliente.arquivoBlob = arquivoBlob;
+      const putReq = store.put(cliente);
+      putReq.onsuccess = () => resolve();
+      putReq.onerror = () => reject(putReq.error);
+    };
+    getReq.onerror = () => reject(getReq.error);
+  });
+}
+
+/* =========================================================================
+   INTERFACE
+   ========================================================================= */
+
+let clientesCache = [];
+let selecionados = new Set();
+let arquivoExport = null; // { nome, arrayBuffer }
+let arquivoModeloNovo = null; // { nome, blob } (tela de cadastro)
+
+function log(msg) {
+  const el = document.getElementById('log');
+  const hora = new Date().toLocaleTimeString('pt-BR');
+  el.textContent += `[${hora}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+// --- Abas ---
+document.querySelectorAll('.tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('ativa'));
+    document.querySelectorAll('.view').forEach((v) => v.classList.remove('ativa'));
+    tab.classList.add('ativa');
+    document.getElementById('view-' + tab.dataset.view).classList.add('ativa');
+  });
+});
+
+// --- Carregar e renderizar clientes ---
+async function recarregarClientes() {
+  clientesCache = await dbListarClientes();
+  renderizarGridClientes();
+  renderizarListaCadastro();
+}
+
+function renderizarGridClientes() {
+  const grid = document.getElementById('grid-clientes');
+  const vazio = document.getElementById('sem-clientes');
+  grid.innerHTML = '';
+  vazio.style.display = clientesCache.length ? 'none' : 'block';
+
+  for (const cliente of clientesCache) {
+    const card = document.createElement('div');
+    card.className = 'cliente-card' + (selecionados.has(cliente.id) ? ' selecionado' : '');
+    card.innerHTML = `
+      <div class="check">${selecionados.has(cliente.id) ? '✓' : ''}</div>
+      <div class="nome">${escapeHtml(cliente.nome)}</div>
+      <div class="arquivo">${escapeHtml(cliente.arquivoNome)}</div>
+    `;
+    card.addEventListener('click', () => {
+      if (selecionados.has(cliente.id)) selecionados.delete(cliente.id);
+      else selecionados.add(cliente.id);
+      renderizarGridClientes();
+    });
+    grid.appendChild(card);
+  }
+  atualizarContagem();
+}
+
+function atualizarContagem() {
+  const el = document.getElementById('contagem-selecionadas');
+  el.textContent = clientesCache.length
+    ? `(${selecionados.size} de ${clientesCache.length} selecionadas)`
+    : '';
+  document.getElementById('contagem-clientes').textContent = `(${clientesCache.length})`;
+}
+
+function renderizarListaCadastro() {
+  const lista = document.getElementById('lista-cad');
+  lista.innerHTML = '';
+  if (!clientesCache.length) {
+    lista.innerHTML = '<div class="vazio">Nenhum cliente cadastrado ainda.</div>';
+    return;
+  }
+  for (const cliente of clientesCache) {
+    const item = document.createElement('div');
+    item.className = 'item-cad';
+    item.innerHTML = `
+      <div class="info">
+        <div class="n">${escapeHtml(cliente.nome)}</div>
+        <div class="a">${escapeHtml(cliente.arquivoNome)}</div>
+      </div>
+      <div class="acoes">
+        <button data-acao="substituir" data-id="${cliente.id}">Substituir arquivo</button>
+        <button data-acao="remover" data-id="${cliente.id}" class="perigo">Remover</button>
+      </div>
+    `;
+    lista.appendChild(item);
+  }
+}
+
+document.getElementById('lista-cad').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button');
+  if (!btn) return;
+  const id = Number(btn.dataset.id);
+  if (btn.dataset.acao === 'remover') {
+    const cliente = clientesCache.find((c) => c.id === id);
+    if (!confirm(`Remover "${cliente.nome}" do cadastro?`)) return;
+    await dbRemoverCliente(id);
+    selecionados.delete(id);
+    await recarregarClientes();
+  } else if (btn.dataset.acao === 'substituir') {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx';
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      await dbAtualizarArquivoCliente(id, file.name, file);
+      await recarregarClientes();
+    };
+    input.click();
+  }
+});
+
+document.getElementById('btn-todos').addEventListener('click', () => {
+  selecionados = new Set(clientesCache.map((c) => c.id));
+  renderizarGridClientes();
+});
+document.getElementById('btn-nenhum').addEventListener('click', () => {
+  selecionados.clear();
+  renderizarGridClientes();
+});
+
+// --- Dropzone genérica ---
+function montarDropzone(zoneEl, inputEl, aceitarArquivo) {
+  zoneEl.addEventListener('click', () => inputEl.click());
+  inputEl.addEventListener('change', () => {
+    if (inputEl.files[0]) aceitarArquivo(inputEl.files[0]);
+  });
+  ['dragover', 'dragenter'].forEach((evt) => {
+    zoneEl.addEventListener(evt, (e) => { e.preventDefault(); zoneEl.classList.add('arrastando'); });
+  });
+  ['dragleave', 'drop'].forEach((evt) => {
+    zoneEl.addEventListener(evt, (e) => { e.preventDefault(); zoneEl.classList.remove('arrastando'); });
+  });
+  zoneEl.addEventListener('drop', (e) => {
+    const file = e.dataTransfer.files[0];
+    if (file) aceitarArquivo(file);
+  });
+}
+
+montarDropzone(
+  document.getElementById('dropzone-export'),
+  document.getElementById('input-export'),
+  async (file) => {
+    const buf = await file.arrayBuffer();
+    arquivoExport = { nome: file.name, arrayBuffer: buf };
+    document.getElementById('export-status').innerHTML = `<div class="arquivo-ok">✓ ${escapeHtml(file.name)}</div>`;
+  }
+);
+
+montarDropzone(
+  document.getElementById('dropzone-modelo'),
+  document.getElementById('input-modelo'),
+  (file) => {
+    arquivoModeloNovo = { nome: file.name, blob: file };
+    document.getElementById('modelo-status').innerHTML = `<div class="arquivo-ok">✓ ${escapeHtml(file.name)}</div>`;
+  }
+);
+
+document.getElementById('btn-add-cliente').addEventListener('click', async () => {
+  const nome = document.getElementById('novo-nome').value.trim();
+  if (!nome) { alert('Digite o nome da loja.'); return; }
+  if (!arquivoModeloNovo) { alert('Selecione o arquivo Modelo em branco dessa loja.'); return; }
+  await dbAdicionarCliente({ nome, arquivoNome: arquivoModeloNovo.nome, arquivoBlob: arquivoModeloNovo.blob });
+  document.getElementById('novo-nome').value = '';
+  arquivoModeloNovo = null;
+  document.getElementById('modelo-status').innerHTML = '';
+  await recarregarClientes();
+});
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function nomeArquivoSeguro(nome) {
+  return nome.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+// --- Geração ---
+let ultimosGerados = []; // [{nome, blob}]
+
+document.getElementById('btn-gerar').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-gerar');
+  document.getElementById('resultado').innerHTML = '';
+  document.getElementById('log').textContent = '';
+  document.getElementById('btn-baixar-zip').style.display = 'none';
+  ultimosGerados = [];
+
+  const idsEscolhidos = [...selecionados];
+  if (!idsEscolhidos.length) { alert('Selecione pelo menos uma loja.'); return; }
+  if (!arquivoExport) { alert('Envie o arquivo exportado do UpSeller.'); return; }
+
+  const preco = parseFloat(document.getElementById('campo-preco').value) || 0;
+  const estoque = parseInt(document.getElementById('campo-estoque').value, 10) || 0;
+
+  btn.disabled = true;
+  btn.textContent = 'Gerando…';
+
+  try {
+    log('Lendo a planilha exportada do UpSeller…');
+    const produtos = await lerExportUpseller(arquivoExport.arrayBuffer);
+    log(`${produtos.length} linha(s) de variação encontradas.`);
+
+    const resultados = [];
+    for (const id of idsEscolhidos) {
+      const cliente = clientesCache.find((c) => c.id === id);
+      try {
+        log(`Gerando para "${cliente.nome}"…`);
+        const modeloBuf = await cliente.arquivoBlob.arrayBuffer();
+        const blob = await gerarModeloParaLoja(modeloBuf, produtos, preco, estoque);
+        const nomeSaida = `pronto_${nomeArquivoSeguro(cliente.nome)}.xlsx`;
+        ultimosGerados.push({ nome: nomeSaida, blob });
+        resultados.push({ cliente: cliente.nome, ok: true, nomeSaida, blob });
+        log(`✓ "${cliente.nome}" gerado com sucesso.`);
+      } catch (e) {
+        resultados.push({ cliente: cliente.nome, ok: false, erro: e.message });
+        log(`✗ Erro em "${cliente.nome}": ${e.message}`);
+      }
+    }
+
+    renderizarResultado(resultados);
+    if (ultimosGerados.length) document.getElementById('btn-baixar-zip').style.display = 'inline-block';
+  } catch (e) {
+    log('✗ Erro ao ler o arquivo do UpSeller: ' + e.message);
+    alert('Não consegui ler o arquivo do UpSeller: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Gerar planilhas';
+  }
+});
+
+function renderizarResultado(resultados) {
+  const container = document.getElementById('resultado');
+  let html = '<table><thead><tr><th>Loja</th><th>Status</th><th></th></tr></thead><tbody>';
+  for (const r of resultados) {
+    if (r.ok) {
+      const url = URL.createObjectURL(r.blob);
+      html += `<tr><td>${escapeHtml(r.cliente)}</td><td><span class="badge ok">pronto</span></td>
+        <td><a class="link-download" href="${url}" download="${r.nomeSaida}">Baixar</a></td></tr>`;
+    } else {
+      html += `<tr><td>${escapeHtml(r.cliente)}</td><td><span class="badge err">erro</span></td>
+        <td style="color:var(--err)">${escapeHtml(r.erro)}</td></tr>`;
+    }
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+document.getElementById('btn-baixar-zip').addEventListener('click', async () => {
+  if (!ultimosGerados.length) return;
+  const zip = new JSZip();
+  for (const item of ultimosGerados) zip.file(item.nome, item.blob);
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'planilhas_prontas.zip';
+  a.click();
+});
+
+// --- init ---
+recarregarClientes();
+</script>
+</body>
+</html>
