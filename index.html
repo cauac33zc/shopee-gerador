@@ -90,6 +90,45 @@
   }
   .cliente-card.selecionado .check { background: var(--accent); border-color: var(--accent); color: #1a1004; }
 
+  .subtitulo {
+    font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+    margin: 16px 0 8px; font-weight: 700;
+  }
+  .grid-grupos {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .grupo-card {
+    background: var(--panel2);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+    position: relative;
+    transition: border-color .15s, background .15s;
+  }
+  .grupo-card:hover { border-color: #3b4968; }
+  .grupo-card.selecionado { border-color: var(--accent); background: #2a2013; }
+  .grupo-card .grupo-titulo { font-weight: 700; font-size: 14px; padding-right: 20px; }
+  .grupo-card .grupo-membros { color: var(--muted); font-size: 12px; margin-top: 6px; line-height: 1.5; }
+  .grupo-card .vazio-inline { font-style: italic; }
+  .grupo-card .check {
+    position: absolute; top: 12px; right: 12px;
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1.5px solid var(--border);
+    background: var(--panel);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--bg);
+  }
+  .grupo-card.selecionado .check { background: var(--accent); border-color: var(--accent); color: #1a1004; }
+
+  .select-grupo {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 6px 8px; font-size: 12px; font: inherit;
+  }
+
   .vazio { color: var(--muted); font-size: 13px; padding: 10px 2px; }
 
   .row-acoes { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -185,6 +224,11 @@
         <button id="btn-todos">Selecionar todos</button>
         <button id="btn-nenhum">Limpar seleção</button>
       </div>
+
+      <div class="subtitulo">Grupos</div>
+      <div id="grid-grupos" class="grid-grupos"></div>
+
+      <div class="subtitulo">Lojas individualmente</div>
       <div id="grid-clientes" class="grid-clientes"></div>
       <div id="sem-clientes" class="vazio" style="display:none">
         Nenhum cliente cadastrado ainda. Vá na aba <b>Clientes</b> e cadastre a loja com o arquivo Modelo em branco dela.
@@ -565,6 +609,60 @@ async function dbAtualizarArquivoCliente(id, arquivoNome, arquivoBlob) {
   });
 }
 
+async function dbAtualizarGrupoCliente(id, grupo) {
+  const db = await abrirDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, 'readwrite');
+    const store = tx.objectStore(DB_STORE);
+    const getReq = store.get(id);
+    getReq.onsuccess = () => {
+      const cliente = getReq.result;
+      if (!cliente) { reject(new Error('cliente não encontrado')); return; }
+      cliente.grupo = grupo;
+      const putReq = store.put(cliente);
+      putReq.onsuccess = () => resolve();
+      putReq.onerror = () => reject(putReq.error);
+    };
+    getReq.onerror = () => reject(getReq.error);
+  });
+}
+
+/* =========================================================================
+   GRUPOS — organização dos clientes em 4 grupos de 3 lojas, pra selecionar
+   com um clique só. Na primeira vez que um cliente cadastrado bater com um
+   dos nomes abaixo (sem acento/maiúscula, já com o grupo dele), o grupo é
+   atribuído automaticamente; depois disso dá pra reatribuir manualmente na
+   aba Clientes.
+   ========================================================================= */
+
+const MAPA_GRUPOS_PADRAO = {
+  1: ['wikerti', 'cadu', 'esquerda'],
+  2: ['juninho', 'leonardo', 'hitalo'],
+  3: ['joaozin', 'hiroshe', 'juliano'],
+  4: ['thiago', 'junior', 'felipe'],
+};
+
+function normalizarNome(s) {
+  return String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+const LOOKUP_GRUPOS_PADRAO = {};
+for (const [grupo, nomes] of Object.entries(MAPA_GRUPOS_PADRAO)) {
+  for (const nome of nomes) LOOKUP_GRUPOS_PADRAO[normalizarNome(nome)] = Number(grupo);
+}
+
+async function autoAtribuirGrupos() {
+  for (const cliente of clientesCache) {
+    if (!cliente.grupo) {
+      const grupo = LOOKUP_GRUPOS_PADRAO[normalizarNome(cliente.nome)];
+      if (grupo) {
+        cliente.grupo = grupo;
+        try { await dbAtualizarGrupoCliente(cliente.id, grupo); } catch (e) { /* ignora, tenta de novo no próximo load */ }
+      }
+    }
+  }
+}
+
 /* =========================================================================
    INTERFACE
    ========================================================================= */
@@ -594,8 +692,43 @@ document.querySelectorAll('.tab').forEach((tab) => {
 // --- Carregar e renderizar clientes ---
 async function recarregarClientes() {
   clientesCache = await dbListarClientes();
+  await autoAtribuirGrupos();
+  renderizarGridGrupos();
   renderizarGridClientes();
   renderizarListaCadastro();
+}
+
+function renderizarGridGrupos() {
+  const container = document.getElementById('grid-grupos');
+  container.innerHTML = '';
+  for (let g = 1; g <= 4; g++) {
+    const membros = clientesCache.filter((c) => c.grupo === g);
+    const todosSelecionados = membros.length > 0 && membros.every((c) => selecionados.has(c.id));
+    const card = document.createElement('div');
+    card.className = 'grupo-card' + (todosSelecionados ? ' selecionado' : '');
+    card.innerHTML = `
+      <div class="check">${todosSelecionados ? '✓' : ''}</div>
+      <div class="grupo-titulo">Grupo ${g}</div>
+      <div class="grupo-membros">${
+        membros.length
+          ? membros.map((m) => escapeHtml(m.nome)).join(', ')
+          : '<span class="vazio-inline">nenhuma loja nesse grupo ainda</span>'
+      }</div>
+    `;
+    if (membros.length) {
+      card.addEventListener('click', () => {
+        const todos = membros.every((c) => selecionados.has(c.id));
+        if (todos) membros.forEach((c) => selecionados.delete(c.id));
+        else membros.forEach((c) => selecionados.add(c.id));
+        renderizarGridGrupos();
+        renderizarGridClientes();
+      });
+    } else {
+      card.style.opacity = '.5';
+      card.style.cursor = 'default';
+    }
+    container.appendChild(card);
+  }
 }
 
 function renderizarGridClientes() {
@@ -615,6 +748,7 @@ function renderizarGridClientes() {
     card.addEventListener('click', () => {
       if (selecionados.has(cliente.id)) selecionados.delete(cliente.id);
       else selecionados.add(cliente.id);
+      renderizarGridGrupos();
       renderizarGridClientes();
     });
     grid.appendChild(card);
@@ -646,6 +780,13 @@ function renderizarListaCadastro() {
         <div class="a">${escapeHtml(cliente.arquivoNome)}</div>
       </div>
       <div class="acoes">
+        <select class="select-grupo" data-acao="grupo" data-id="${cliente.id}">
+          <option value="">Sem grupo</option>
+          <option value="1" ${cliente.grupo === 1 ? 'selected' : ''}>Grupo 1</option>
+          <option value="2" ${cliente.grupo === 2 ? 'selected' : ''}>Grupo 2</option>
+          <option value="3" ${cliente.grupo === 3 ? 'selected' : ''}>Grupo 3</option>
+          <option value="4" ${cliente.grupo === 4 ? 'selected' : ''}>Grupo 4</option>
+        </select>
         <button data-acao="substituir" data-id="${cliente.id}">Substituir arquivo</button>
         <button data-acao="remover" data-id="${cliente.id}" class="perigo">Remover</button>
       </div>
@@ -653,6 +794,15 @@ function renderizarListaCadastro() {
     lista.appendChild(item);
   }
 }
+
+document.getElementById('lista-cad').addEventListener('change', async (ev) => {
+  const sel = ev.target.closest('select[data-acao="grupo"]');
+  if (!sel) return;
+  const id = Number(sel.dataset.id);
+  const grupo = sel.value ? Number(sel.value) : null;
+  await dbAtualizarGrupoCliente(id, grupo);
+  await recarregarClientes();
+});
 
 document.getElementById('lista-cad').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('button');
@@ -680,10 +830,12 @@ document.getElementById('lista-cad').addEventListener('click', async (ev) => {
 
 document.getElementById('btn-todos').addEventListener('click', () => {
   selecionados = new Set(clientesCache.map((c) => c.id));
+  renderizarGridGrupos();
   renderizarGridClientes();
 });
 document.getElementById('btn-nenhum').addEventListener('click', () => {
   selecionados.clear();
+  renderizarGridGrupos();
   renderizarGridClientes();
 });
 
