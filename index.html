@@ -590,7 +590,7 @@ async function dbRemoverCliente(id) {
   });
 }
 
-async function dbAtualizarArquivoCliente(id, arquivoNome, arquivoBlob) {
+async function dbAtualizarArquivoCliente(id, arquivoNome, arquivoBuffer) {
   const db = await abrirDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DB_STORE, 'readwrite');
@@ -600,7 +600,8 @@ async function dbAtualizarArquivoCliente(id, arquivoNome, arquivoBlob) {
       const cliente = getReq.result;
       if (!cliente) { reject(new Error('cliente não encontrado')); return; }
       cliente.arquivoNome = arquivoNome;
-      cliente.arquivoBlob = arquivoBlob;
+      cliente.arquivoBuffer = arquivoBuffer;
+      delete cliente.arquivoBlob; // campo antigo (File "vivo"), não confiável entre sessões
       const putReq = store.put(cliente);
       putReq.onsuccess = () => resolve();
       putReq.onerror = () => reject(putReq.error);
@@ -821,7 +822,8 @@ document.getElementById('lista-cad').addEventListener('click', async (ev) => {
     input.onchange = async () => {
       const file = input.files[0];
       if (!file) return;
-      await dbAtualizarArquivoCliente(id, file.name, file);
+      const buffer = await file.arrayBuffer();
+      await dbAtualizarArquivoCliente(id, file.name, buffer);
       await recarregarClientes();
     };
     input.click();
@@ -870,8 +872,9 @@ montarDropzone(
 montarDropzone(
   document.getElementById('dropzone-modelo'),
   document.getElementById('input-modelo'),
-  (file) => {
-    arquivoModeloNovo = { nome: file.name, blob: file };
+  async (file) => {
+    const buffer = await file.arrayBuffer();
+    arquivoModeloNovo = { nome: file.name, buffer };
     document.getElementById('modelo-status').innerHTML = `<div class="arquivo-ok">✓ ${escapeHtml(file.name)}</div>`;
   }
 );
@@ -880,7 +883,7 @@ document.getElementById('btn-add-cliente').addEventListener('click', async () =>
   const nome = document.getElementById('novo-nome').value.trim();
   if (!nome) { alert('Digite o nome da loja.'); return; }
   if (!arquivoModeloNovo) { alert('Selecione o arquivo Modelo em branco dessa loja.'); return; }
-  await dbAdicionarCliente({ nome, arquivoNome: arquivoModeloNovo.nome, arquivoBlob: arquivoModeloNovo.blob });
+  await dbAdicionarCliente({ nome, arquivoNome: arquivoModeloNovo.nome, arquivoBuffer: arquivoModeloNovo.buffer });
   document.getElementById('novo-nome').value = '';
   arquivoModeloNovo = null;
   document.getElementById('modelo-status').innerHTML = '';
@@ -927,7 +930,16 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
       const cliente = clientesCache.find((c) => c.id === id);
       try {
         log(`Gerando para "${cliente.nome}"…`);
-        const modeloBuf = await cliente.arquivoBlob.arrayBuffer();
+        let modeloBuf;
+        if (cliente.arquivoBuffer) {
+          modeloBuf = cliente.arquivoBuffer;
+        } else if (cliente.arquivoBlob) {
+          // cadastro antigo (arquivo "vivo"), pode ter ficado inválido depois de fechar o navegador
+          try { modeloBuf = await cliente.arquivoBlob.arrayBuffer(); }
+          catch (e) { throw new Error('Arquivo Modelo desse cliente ficou inválido — vá na aba Clientes e clique em "Substituir arquivo" pra reenviar.'); }
+        } else {
+          throw new Error('Esse cliente não tem arquivo Modelo cadastrado.');
+        }
         const blob = await gerarModeloParaLoja(modeloBuf, produtos, preco, estoque);
         const nomeSaida = `pronto_${nomeArquivoSeguro(cliente.nome)}.xlsx`;
         ultimosGerados.push({ nome: nomeSaida, blob });
